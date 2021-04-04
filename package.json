@@ -1,0 +1,19 @@
+{
+  "name": "mini-chess",
+  "version": "1.0.0",
+  "description": "a little chess game played on a 3x3 grid with pawns",
+  "main": "index.html",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rbrander/mini-chess.git"
+  },
+  "author": "Rob Brander",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/rbrander/mini-chess/issues"
+  },
+  "homepage": "https://github.com/rbrander/mini-chess#readme"
+}

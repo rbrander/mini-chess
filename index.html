@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Mini Chess</title>
+  <meta charset="utf-8" />
+  <link rel="shortcut icon" href="data:;base64,">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: sans-serif;
+      background:#666;
+      color: white;
+      text-align: center;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+      line-height: 1.5rem;
+    }
+
+    .grid-container {
+      border: 2px solid black;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      display: inline-block;
+    }
+    .white-shadow {
+      box-shadow: 0px 0px 10px 10px #aaa;
+    }
+    .black-shadow {
+      box-shadow: 0px 0px 10px 10px #333;
+    }
+
+    .grid-row {
+      margin: 0;
+      padding: 0;
+
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+    }
+    .grid-square {
+      box-sizing: border-box;
+      color: #AAA;
+      font-size: 2rem;
+      vertical-align: middle;
+      display: inline-block;
+      height: 52px;
+      width: 52px;
+      border-collapse: collapse;
+      border: 1px solid black;
+    }
+    .grid-square:hover {
+      opacity: 0.7;
+    }
+    .grid-square.draggable { cursor: grab; }
+    .grid-square.white {
+      background-image: url(./images/squareW.png);
+    }
+    .grid-square.black {
+      background-image: url(./images/squareB.png);
+    }
+    .dragging{ cursor: grabbing;}
+  </style>
+</head>
+<body>
+  <h1>Mini Chess</h1>
+  <fieldset>
+    <legend>Select a version:</legend>
+    <div><a href="chess-dnd.html">Drag and Drop</a></div>
+    <div><a href="chess-canvas.html">Canvas</a></div>
+  </fieldset>
+</body>
+</html>
