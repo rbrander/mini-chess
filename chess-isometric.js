@@ -3,6 +3,7 @@
 // "Tri-Pawn Challenge" is a game of three pawns per player to force a stalemate
 
 // TODO
+// - make it mobile friendly
 // - add a way to reset the game (go back to the menu from game over screen)
 // - add animation for piece moves (using quadraticEase())
 // - add screen transitions between game states
@@ -19,35 +20,51 @@ const imgBlackPiece = document.getElementById('black-piece');
 
 // constants
 const POINTER_RADIUS = 10;
+
 const BACKGROUND_COLOR = '#225566';
 const WHITE_TILE_COLOR = '#CCCCCC';
 const BLACK_TILE_COLOR = '#444444';
 const HIGHLIGHT_COLOR = 'rgba(255, 173, 0, 0.5)'; // #FFAD00
+
 const FONT_NAME = 'Righteous';
 const DEFAULT_TEXT_SIZE_MULTIPLIER = 40; // 1/40th of the canvas height is used for the font size (e.g. 800px canvas height / 40 = 20px font)
+
 const NUM_MENU_SECTIONS = 5; // content is displayed in different sections, each section is a fraction of the canvas height, full width
+// NOTE: section 0 and 4 are reserved for padding
+const MENU_TITLE_SECTION = 1;
+const MENU_ONE_PLAYER_SECTION = 2;
+const MENU_TWO_PLAYER_SECTION = 3;
+const MENU_OPTIONS = [
+  { text: '  1 - Player  ', section: MENU_ONE_PLAYER_SECTION, pieces: [ imgWhitePiece ] },
+  { text: '  2 - Player  ', section: MENU_TWO_PLAYER_SECTION, pieces: [ imgBlackPiece, imgWhitePiece ] }
+];
+
 const TILE_SIZE = 250; // pixels
 const TILE_WIDTH = TILE_SIZE;
 const TILE_HEIGHT = TILE_WIDTH / 2;
 const HALF_TILE_WIDTH = TILE_WIDTH / 2;
 const HALF_TILE_HEIGHT = TILE_HEIGHT / 2;
+
 const BOARD_WIDTH = 3; // number of board squares wide
 const BOARD_HEIGHT = 3; // number of board squares high
+
 const BLACK_PIECE = 'Black';
 const WHITE_PIECE = 'White';
 const NO_PIECE = 'Empty';
 
+
 // state
 let pointerX = 0, pointerY = 0, isPointerDown = false, hasPointer = false;
 let winner = NO_PIECE; // to be determined once the game is over; used for display purpose only
-let numPlayers = 1; // TODO: setup menu screen to allow user to select 1 or 2 player game
+let numPlayers = 1;
 let currPlayer = WHITE_PIECE;
 let selectedTile = undefined;
-const board = [
+const INITIAL_BOARD = [
   [BLACK_PIECE, BLACK_PIECE, BLACK_PIECE],
   [NO_PIECE, NO_PIECE, NO_PIECE],
   [WHITE_PIECE, WHITE_PIECE, WHITE_PIECE]
 ];
+let board = [];
 
 // game states
 const GAME_STATE_MENU = 'Main Menu';
@@ -148,11 +165,35 @@ const isGameOver = (currPlayer) => {
   return isGameOver;
 };
 
+const resetGame = () => {
+  selectedTile = undefined;
+  winner = NO_PIECE;
+  currPlayer = WHITE_PIECE;
+  board = JSON.parse(JSON.stringify(INITIAL_BOARD));
+  gameState = GAME_STATE_MENU;
+};
+
 const quadraticEase = (timeElapsed, startX, startY, destinationX, destinationY, duration) => {
   const timeFraction = timeElapsed / duration;
   const x = (destinationX - startX) * timeFraction * timeFraction + startX;
   const y = (destinationY - startY) * timeFraction * timeFraction + startY;
   return { x, y };
+};
+
+const measureTextWidth = (text, fontSize) => {
+  if (fontSize !== undefined && typeof fontSize === 'number' && fontSize > 0) {
+    ctx.font = `${fontSize}px ${FONT_NAME}`;
+  }
+  const { width } = ctx.measureText(text);
+  return width;
+};
+
+const measureTextHeight = (text, fontSize) => {
+  if (fontSize !== undefined && typeof fontSize === 'number' && fontSize > 0) {
+    ctx.font = `${fontSize}px ${FONT_NAME}`;
+  }
+  const { actualBoundingBoxAscent, actualBoundingBoxDescent } = ctx.measureText(text);
+  return Math.abs(actualBoundingBoxAscent + actualBoundingBoxDescent);
 };
 
 
@@ -358,11 +399,6 @@ const drawMenu = () => {
   // draw background sections
   const sectionHeight = getMenuSectionHeight();
   const pointerSection = hasPointer ? Math.floor(pointerY / sectionHeight) : -1;
-  const MENU_TITLE_SECTION = 1;
-  const MENU_ONE_PLAYER_SECTION = 2;
-  const MENU_TWO_PLAYER_SECTION = 3;
-  const isPointerOver1PlayerOption = pointerSection === MENU_ONE_PLAYER_SECTION;
-  const isPointerOver2PlayerOption = pointerSection === MENU_TWO_PLAYER_SECTION;
   for (let section = 0; section < NUM_MENU_SECTIONS; section++) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
     if (section === MENU_TITLE_SECTION) {
@@ -375,55 +411,76 @@ const drawMenu = () => {
   const canvasMiddleX = canvas.width / 2;
   const titleYOffset = (MENU_TITLE_SECTION + 0.5) * sectionHeight; // get the half way pointer of the title section
   const titleText = 'Tri-Pawn Challenge';
-  const titleFontSize = sectionHeight * 0.5; // 50% of the section for title
-  drawText(titleText, canvasMiddleX, titleYOffset, titleFontSize)
+  let titleFontSize = sectionHeight * 0.5; // 50% of the section for title
+  const titleTextWidth = measureTextWidth(titleText, titleFontSize);
+  const maxContentWidth = (canvas.width * 0.8); // use 80% of canvas width so there is room for 10% padding on each side
+  if (titleTextWidth > maxContentWidth) {
+    // Break up the two words in the title into two lines and make fit
+    const [firstWord, secondWord] = titleText.split(' ');
+    const firstWordWidth = measureTextWidth(firstWord);
+    const secondWordWidth = measureTextWidth(secondWord);
+    const maxWidth = Math.max(firstWordWidth, secondWordWidth);
+    if (maxWidth > maxContentWidth) {
+      const aspectRatio = titleFontSize / maxWidth;
+      const newFontSize = aspectRatio * maxContentWidth;
+      titleFontSize = newFontSize;
+    }
+    drawText(firstWord, canvasMiddleX, titleYOffset, titleFontSize, 'center', 'bottom');
+    drawText(secondWord, canvasMiddleX, titleYOffset, titleFontSize, 'center', 'top');
+  } else {
+    drawText(titleText, canvasMiddleX, titleYOffset, titleFontSize);
+  }
 
-  // draw 1-player option
-  const optionFontSize = sectionHeight * 0.4; // 40% of the section for option headings
-  const onePlayerText = '  1 - Player  '; // padded with space for image offset
-  const onePlayerYOffset = (MENU_ONE_PLAYER_SECTION + 0.5) * sectionHeight; // get the half way pointer of the 1-player section
-  drawText(onePlayerText, canvasMiddleX, onePlayerYOffset, optionFontSize, 'center', 'middle', isPointerOver1PlayerOption);
-  const onePlayerTextSize = ctx.measureText(onePlayerText);
+  // measure the text at the desired font size to see if it fits on the screen, if not, resize the font
+  const desiredOptionFontSize = sectionHeight * 0.4; // 40% of the section height in pixels
+  const maxOptionTextWidth = MENU_OPTIONS
+    .map(option => measureTextWidth(option.text, desiredOptionFontSize))
+    .reduce((maxOptionTextWidth, optionTextWidth) => Math.ceil(optionTextWidth > maxOptionTextWidth ? optionTextWidth : maxOptionTextWidth));
+  // set the font size to be used, defaulting to desired size
+  let optionFontSize = desiredOptionFontSize;
+  if (maxOptionTextWidth > maxContentWidth) {
+    const aspectRatio = desiredOptionFontSize / maxOptionTextWidth;
+    const newFontSize = aspectRatio * maxContentWidth;
+    optionFontSize = newFontSize;
+  }
 
-  const leftSideOfOnePlayerText = (canvas.width - onePlayerTextSize.width) / 2;
-  const textHeight = Math.abs(onePlayerTextSize.actualBoundingBoxAscent) + Math.abs(onePlayerTextSize.actualBoundingBoxDescent);
-  // draw the white pieces on each side of the text
-  const pieceHeight = textHeight * 1.5;
+  // calculate the size of the pieces, to see if we can fit them on the screen
+  // note: this assumes the white piece is the same size as the black piece
+  const maxOptionTextHeight = MENU_OPTIONS
+    .map(option => measureTextHeight(option.text, optionFontSize))
+    .reduce((maxOptionTextHeight, optionTextHeight) => Math.ceil(optionTextHeight > maxOptionTextHeight ? optionTextHeight : maxOptionTextHeight));
+  const pieceHeight = maxOptionTextHeight * 1.5;
   const pieceAspectRatio = (pieceHeight / imgWhitePiece.height);
   const pieceWidth = pieceAspectRatio * imgWhitePiece.width;
-  ctx.drawImage(imgWhitePiece,
-    leftSideOfOnePlayerText - pieceWidth, onePlayerYOffset - pieceHeight / 2,
-    pieceWidth, pieceHeight
-  );
-  ctx.drawImage(imgWhitePiece,
-    leftSideOfOnePlayerText + onePlayerTextSize.width, onePlayerYOffset - pieceHeight / 2,
-    pieceWidth, pieceHeight
-  );
+  const maxOptionPieces = MENU_OPTIONS.reduce((maxOptionPieces, option) => (option?.pieces?.length ?? 0) > maxOptionPieces ? (option?.pieces?.length ?? 0) : maxOptionPieces, 0);
+  const totalWidthNeeded = maxOptionTextWidth + (pieceWidth * maxOptionPieces) * 2; // *2 to include image widths on both sides of the text
+  const hasEnoughSpaceToDrawPieces = (totalWidthNeeded < maxContentWidth);
 
-  // draw 2-player option
-  const twoPlayerText = '  2 - Player  ';
-  const twoPlayerYOffset = (MENU_TWO_PLAYER_SECTION + 0.5) * sectionHeight; // get the half way pointer of the 2-player section
-  drawText(twoPlayerText, canvasMiddleX, twoPlayerYOffset, optionFontSize, 'center', 'middle', isPointerOver2PlayerOption);
-  const twoPlayerTextSize = ctx.measureText(twoPlayerText);
+  // draw the options
+  MENU_OPTIONS.forEach((option) => {
+    const yOffset = (option.section + 0.5) * sectionHeight; // add 0.5 to the section to the get middle of the section
+    const isPointerOverOption = pointerSection === option.section;
+    drawText(option.text, canvasMiddleX, yOffset, optionFontSize, 'center', 'middle', isPointerOverOption);
+    const optionTextWidth = measureTextWidth(option.text);
 
-  // draw the two pieces on each side of the text
-  const leftSideOfTwoPlayerText = (canvas.width - twoPlayerTextSize.width) / 2;
-  ctx.drawImage(imgBlackPiece,
-    leftSideOfTwoPlayerText - pieceWidth, twoPlayerYOffset - pieceHeight / 2,
-    pieceWidth, pieceHeight
-  );
-  ctx.drawImage(imgBlackPiece,
-    leftSideOfTwoPlayerText + twoPlayerTextSize.width, twoPlayerYOffset - pieceHeight / 2,
-    pieceWidth, pieceHeight
-  );
-  ctx.drawImage(imgWhitePiece,
-    leftSideOfTwoPlayerText - pieceWidth * 2, twoPlayerYOffset - pieceHeight / 2,
-    pieceWidth, pieceHeight
-  );
-  ctx.drawImage(imgWhitePiece,
-    leftSideOfTwoPlayerText + twoPlayerTextSize.width + pieceWidth, twoPlayerYOffset - pieceHeight / 2,
-    pieceWidth, pieceHeight
-  );
+      // draw the option's pieces from middle, out
+    if (hasEnoughSpaceToDrawPieces) {
+      const leftSideOfOptionText = (canvas.width - optionTextWidth) / 2;
+      option.pieces.forEach((piece, pieceIndex) => {
+        const xOffset = pieceIndex * pieceWidth;
+        // draw on the left side of the text
+        ctx.drawImage(piece,
+          leftSideOfOptionText - pieceWidth - xOffset, yOffset - pieceHeight / 2,
+          pieceWidth, pieceHeight
+        );
+        // draw on the left side of the text
+        ctx.drawImage(piece,
+          leftSideOfOptionText + optionTextWidth + xOffset, yOffset - pieceHeight / 2,
+          pieceWidth, pieceHeight
+        );
+      })
+    }
+  });
 }
 
 const drawPlaying = () => {
@@ -463,6 +520,7 @@ const handleMenu = () => {
   const TWO_PLAYER_SECTION = 3;
   if (isPointerDown && (pointerSection === ONE_PLAYER_SECTION || pointerSection == TWO_PLAYER_SECTION)) {
     isPointerDown = false;
+    resetGame();
     numPlayers = pointerSection - ONE_PLAYER_SECTION + 1;
     gameState = GAME_STATE_PLAYING;
   }
@@ -565,7 +623,11 @@ const handlePlaying = () => {
 };
 
 const handleGameOver = () => {
-  //
+  // go back to the main menu on click
+  if (isPointerDown) {
+    isPointerDown = false;
+    resetGame();
+  }
 };
 
 
@@ -574,15 +636,12 @@ const handleGameOver = () => {
 const update = () => {
   switch (gameState) {
     case GAME_STATE_MENU:
-      // TODO: gameState = GAME_STATE_PLAYING;
       handleMenu();
       break;
     case GAME_STATE_PLAYING:
-      // TODO: gameState = GAME_STATE_GAME_OVER
       handlePlaying();
       break;
     case GAME_STATE_GAME_OVER:
-      // TODO: gameState = GAME_STATE_MENU;
       handleGameOver();
       break;
     default:
