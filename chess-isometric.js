@@ -4,10 +4,7 @@
 
 // TODO
 // - make it mobile friendly
-// - add a way to reset the game (go back to the menu from game over screen)
-// - add animation for piece moves (using quadraticEase())
 // - add screen transitions between game states
-// - determine a way for indicating active player (using piece image)
 // - add the ability to deselect a piece by clicking on it once it is selected?
 // - add sound
 // - add unit tests for some of the functions
@@ -65,6 +62,10 @@ const INITIAL_BOARD = [
   [WHITE_PIECE, WHITE_PIECE, WHITE_PIECE]
 ];
 let board = [];
+let animationStart = undefined; // holds the tick value of the start of the animation
+let animationMove = undefined; // holds an object { pieceX, pieceY, destX, destY } when animating
+let animationPercentage = 0; // value between 0 and 1 inclusive
+const PIECE_ANIMATION_DURATION = 500; // in milliseconds
 
 // game states
 const GAME_STATE_MENU = 'Main Menu';
@@ -165,6 +166,33 @@ const isGameOver = (currPlayer) => {
   return isGameOver;
 };
 
+// Used in 1-player game to determine opponents next move
+// returns an object: { pieceX, pieceY, destX, destY }
+const getRandomBlackMove = () => {
+  let pieceLocations = getPieceLocations(BLACK_PIECE);
+  let playerMove = undefined;
+  while (pieceLocations.length > 0 && playerMove === undefined) {
+    // find a random index to pop off the array
+    const randomIndex = Math.floor(Math.random() * pieceLocations.length);
+    const [pieceX, pieceY] = pieceLocations.splice(randomIndex, 1)[0];
+
+    // get valid moves and if there are none, find another piece
+    const validMoves = getValidMoves(pieceX, pieceY, BLACK_PIECE);
+    const hasValidMoves = validMoves.length > 0;
+    if (hasValidMoves) {
+      // grab a random move
+      const validMoveRandomIndex = validMoves.length === 1 ? 0 : Math.floor(Math.random() * validMoves.length)
+      const validMove = validMoves[validMoveRandomIndex];
+      // set the playerMove (to move the piece) and break out of the loop
+      playerMove = { pieceX, pieceY, destX:validMove.x, destY:validMove.y };
+      // break out of loop
+      break;
+    }
+    // else find another piece to move, by looping back up
+  }
+  return playerMove;
+};
+
 const resetGame = () => {
   selectedTile = undefined;
   winner = NO_PIECE;
@@ -173,12 +201,14 @@ const resetGame = () => {
   gameState = GAME_STATE_MENU;
 };
 
-const quadraticEase = (timeElapsed, startX, startY, destinationX, destinationY, duration) => {
-  const timeFraction = timeElapsed / duration;
-  const x = (destinationX - startX) * timeFraction * timeFraction + startX;
-  const y = (destinationY - startY) * timeFraction * timeFraction + startY;
-  return { x, y };
-};
+// x is the progress (value between 0 and 1 inclusive)
+// function taken from https://easings.net/#easeInBack
+function easeInBack(x) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return c3 * x * x * x - c1 * x * x;
+}
+
 
 const measureTextWidth = (text, fontSize) => {
   if (fontSize !== undefined && typeof fontSize === 'number' && fontSize > 0) {
@@ -354,7 +384,17 @@ const drawPieces = (xOffset, yOffset) => {
         continue;
       }
 
-      const [isoX, isoY] = toIso(x, y);
+      const pieceGridPosition = { x, y };
+      const isAnimatingPiece = typeof animationMove === 'object' && animationMove.pieceX === x && animationMove.pieceY === y;
+      if (isAnimatingPiece) {
+        const xRange = (animationMove.destX - animationMove.pieceX);
+        const yRange = (animationMove.destY - animationMove.pieceY);
+        const percentageEased = easeInBack(animationPercentage);
+        pieceGridPosition.x = percentageEased * xRange + animationMove.pieceX;
+        pieceGridPosition.y = percentageEased * yRange + animationMove.pieceY;
+      }
+
+      const [isoX, isoY] = toIso(pieceGridPosition.x, pieceGridPosition.y);
       const pieceImage = piece === BLACK_PIECE ? imgBlackPiece : imgWhitePiece;
       drawPiece(xOffset + isoX, yOffset + isoY, pieceImage);
     }
@@ -395,7 +435,7 @@ const drawText = (text, x, y, fontSize, align = 'center', baseline = 'middle', i
 
 // Game State drawing functions
 
-const drawMenu = () => {
+const drawMenu = (tick) => {
   // draw background sections
   const sectionHeight = getMenuSectionHeight();
   const pointerSection = hasPointer ? Math.floor(pointerY / sectionHeight) : -1;
@@ -483,12 +523,12 @@ const drawMenu = () => {
   });
 }
 
-const drawPlaying = () => {
+const drawPlaying = (tick) => {
   drawBoardWithPieces();
   drawCurrentPlayerIndicator();
 };
 
-const drawGameOver = () => {
+const drawGameOver = (tick) => {
   drawBoardWithPieces();
 
   // draw a semi-transparent layer over whole canvas to emphasize text
@@ -512,7 +552,7 @@ const drawGameOver = () => {
 
 // Game State update functions
 
-const handleMenu = () => {
+const handleMenu = (tick) => {
   // detect if the player has clicked on a menu option, if so, start the game
   const sectionHeight = getMenuSectionHeight();
   const pointerSection = hasPointer ? Math.floor(pointerY / sectionHeight) : -1;
@@ -526,8 +566,7 @@ const handleMenu = () => {
   }
 };
 
-let isPlaying = false;
-const handlePlaying = () => {
+const handlePlaying = (tick) => {
   // check if the game is over before trying to handle logic for next move (following logic)
   if (isGameOver(currPlayer)) {
     gameState = GAME_STATE_GAME_OVER;
@@ -540,42 +579,32 @@ const handlePlaying = () => {
 
   // When there is only one player, and the current player is black (the opponent),
   // move a random piece to a valid place
-  if (numPlayers === 1 && currPlayer === BLACK_PIECE && !isPlaying) {
-    isPlaying = true;
-    setTimeout(function() {
-      // pick a random piece
-      let pieceLocations = getPieceLocations(BLACK_PIECE);
-      let playerMove = undefined;
-      while (pieceLocations.length > 0 && playerMove === undefined) {
-        // find a random index to pop off the array
-        const randomIndex = Math.floor(Math.random() * pieceLocations.length);
-        // const [pieceX, pieceY] = pieceLocations.splice(randomIndex, 1);
-        const [pieceX, pieceY] = pieceLocations.splice(randomIndex, 1)[0];
-
-        // get valid moves and if there are none, find another piece
-        const validMoves = getValidMoves(pieceX, pieceY, BLACK_PIECE);
-        const hasValidMoves = validMoves.length > 0;
-        if (hasValidMoves) {
-          // grab a random move
-          const validMoveRandomIndex = validMoves.length === 1 ? 0 : Math.floor(Math.random() * validMoves.length)
-          const validMove = validMoves[validMoveRandomIndex];
-          // set the playerMove (to move the piece) and break out of the loop
-          playerMove = { pieceX, pieceY, destX:validMove.x, destY:validMove.y };
-          // toggle the player to the other player
-          currPlayer = WHITE_PIECE;
-          // break out of loop
-          break;
-        }
-        // else find another piece to move, by looping back up
-      }
-
-      if (playerMove !== undefined) {
-        movePiece(playerMove.pieceX, playerMove.pieceY, playerMove.destX, playerMove.destY);
-      }
-
-      isPlaying = false;
-    }, 1000);
+  const isComputerPlayerTurn = (numPlayers === 1 && currPlayer === BLACK_PIECE);
+  if (isComputerPlayerTurn) {
+    const isStartingAnimation = animationStart === undefined;
+    if (isStartingAnimation) {
+      animationStart = tick;
+      animationMove = getRandomBlackMove();
+      animationPercentage = 0;
+    }
   }
+
+  // animation updates
+  const isAnimatingPiece = typeof animationMove === 'object' && typeof animationStart === 'number';
+  if (isAnimatingPiece) {
+    animationPercentage = Math.min((tick - animationStart) / PIECE_ANIMATION_DURATION, 1.0);
+    const isAnimationDone = animationPercentage === 1.0;
+    if (isAnimationDone) {
+      // register the piece move
+      movePiece(animationMove.pieceX, animationMove.pieceY, animationMove.destX, animationMove.destY);
+      // stop animation
+      animationStart = undefined;
+      animationMove = undefined;
+      // change player
+      currPlayer = getOpponent(currPlayer);
+      selectedTile = undefined;
+    }
+  };
 
   // short-circuit if there is no mouse pointer on the canvas, or the pointer isn't down
   if (!hasPointer || !isPointerDown) {
@@ -597,12 +626,13 @@ const handlePlaying = () => {
     const isValidMove = validMoves.some(cell => cell.x === pointerTileX && cell.y === pointerTileY);
     const isPointerOnAnotherPiece = board[pointerTileY][pointerTileX] === currPlayer;
     if (isValidMove) {
-      // move the piece
-      movePiece(selectedTile.x, selectedTile.y, pointerTileX, pointerTileY);
-      // change the player (regardless of single or dual players)
-      currPlayer = getOpponent(currPlayer);
-      // clear the selected tile
-      selectedTile = undefined;
+      // animate the piece
+      const isStartingAnimation = animationStart === undefined;
+      if (isStartingAnimation) {
+        animationStart = tick;
+        animationMove = { pieceX: selectedTile.x, pieceY: selectedTile.y, destX: pointerTileX, destY: pointerTileY }
+        animationPercentage = 0;
+      }
     } else if (isPointerOnAnotherPiece) {
       selectedTile = { x: pointerTileX, y: pointerTileY };
     }
@@ -622,7 +652,7 @@ const handlePlaying = () => {
   isPointerDown = false;
 };
 
-const handleGameOver = () => {
+const handleGameOver = (tick) => {
   // go back to the main menu on click
   if (isPointerDown) {
     isPointerDown = false;
@@ -633,35 +663,35 @@ const handleGameOver = () => {
 
 // Game loop functions
 
-const update = () => {
+const update = (tick) => {
   switch (gameState) {
     case GAME_STATE_MENU:
-      handleMenu();
+      handleMenu(tick);
       break;
     case GAME_STATE_PLAYING:
-      handlePlaying();
+      handlePlaying(tick);
       break;
     case GAME_STATE_GAME_OVER:
-      handleGameOver();
+      handleGameOver(tick);
       break;
     default:
       throw new Error(`Invalid gameState: ${gameState}`);
   }
 };
 
-const draw = () => {
+const draw = (tick) => {
   drawBackground();
 
   // decide what to draw based on the current game state
   switch (gameState) {
     case GAME_STATE_MENU:
-      drawMenu();
+      drawMenu(tick);
       break;
     case GAME_STATE_PLAYING:
-      drawPlaying();
+      drawPlaying(tick);
       break;
     case GAME_STATE_GAME_OVER:
-      drawGameOver();
+      drawGameOver(tick);
       break;
     default:
       throw new Error(`Invalid gameState: ${gameState}`);
@@ -671,9 +701,9 @@ const draw = () => {
   drawPointer();
 };
 
-const loop = () => {
-  update();
-  draw();
+const loop = (tick) => {
+  update(tick);
+  draw(tick);
   requestAnimationFrame(loop);
 };
 
